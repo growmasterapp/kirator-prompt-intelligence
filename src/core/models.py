@@ -1,0 +1,138 @@
+from enum import Enum
+from pydantic import BaseModel, Field
+from typing import Any, Optional, List
+from datetime import datetime
+
+class TaskCategory(str, Enum):
+    """Expanded task categories for better classification"""
+    CODE_GEN = "code_generation"
+    DATA_ANALYSIS = "data_analysis"
+    WEB_DEV = "web_development"
+    SYSTEM_DESIGN = "system_design"
+    BUSINESS = "business_planning"
+    CREATIVE = "creative_writing"
+    RESEARCH = "research_analysis"
+    TROUBLESHOOTING = "troubleshooting"
+    GENERAL = "general"
+
+class ComplexityLevel(str, Enum):
+    TRIVIAL = "trivial"
+    SIMPLE = "simple"
+    MODERATE = "moderate"
+    COMPLEX = "complex"
+    EXPERT = "expert"
+
+class OutputFormat(str, Enum):
+    PLAIN_TEXT = "plain_text"
+    MARKDOWN = "markdown"
+    JSON = "json"
+
+class RequestClassification(BaseModel):
+    task_category: TaskCategory
+    complexity_level: ComplexityLevel
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    reasoning_method: str
+    processing_time_ms: float
+    timestamp: datetime = Field(default_factory=datetime.now)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class IntentAnalysis(BaseModel):
+    primary_intent: str
+    secondary_intents: List[str] = Field(default_factory=list)
+    domain_knowledge_required: List[str] = Field(default_factory=list)
+    constraints_identified: List[str] = Field(default_factory=list)
+    ambiguity_score: float = Field(ge=0.0, le=1.0)
+    clarification_questions: List[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+
+class DifficultyAssessment(BaseModel):
+    overall_level: ComplexityLevel
+    technical_complexity: int = Field(ge=1, le=10)
+    domain_expertise_required: int = Field(ge=1, le=10)
+    ambiguity_tolerance: int = Field(ge=1, le=10)
+    creativity_demand: int = Field(ge=1, le=10)
+    estimated_steps: int = Field(ge=1)
+    risk_factors: List[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+
+class TechniqueMetadata(BaseModel):
+    id: str
+    name: str
+    category: str
+    description: str
+    effectiveness_score: float = Field(ge=0.0, le=1.0)
+    complexity_overhead: int = Field(ge=1, le=5)
+    tags: List[str] = Field(default_factory=list)
+
+class PromptStrategy(BaseModel):
+    objective_summary: str
+    selected_techniques: List[TechniqueMetadata]
+    technique_ordering: List[str]
+    reasoning_framework: str
+    output_format_specification: OutputFormat
+    quality_targets: dict[str, float] = Field(default_factory=dict)
+    risk_mitigations: List[str] = Field(default_factory=list)
+    estimated_tokens: int
+    confidence: float = Field(ge=0.0, le=1.0)
+
+class PromptQualityScore(BaseModel):
+    """PEEM framework evaluation result with 9 scored axes + overall."""
+    clarity_structure: int = Field(default=3, ge=1, le=5)
+    linguistic_quality: int = Field(default=3, ge=1, le=5)
+    fairness_bias: int = Field(default=3, ge=1, le=5)
+    completeness: int = Field(default=3, ge=1, le=5)
+    specificity: int = Field(default=3, ge=1, le=5)
+    ambiguity: int = Field(default=3, ge=1, le=5)
+    constraint_clarity: int = Field(default=3, ge=1, le=5)
+    model_compatibility: int = Field(default=3, ge=1, le=5)
+    overall_quality: int = Field(default=3, ge=1, le=5)
+    overall_score: int = Field(ge=0, le=100)
+    weaknesses: List[str] = Field(default_factory=list)
+    improvements: List[str] = Field(default_factory=list)
+    rationale: dict[str, str] = Field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        """Serialize to plain dict for JSON rendering and API responses."""
+        return {
+            "clarity_structure": self.clarity_structure,
+            "linguistic_quality": self.linguistic_quality,
+            "fairness_bias": self.fairness_bias,
+            "completeness": self.completeness,
+            "specificity": self.specificity,
+            "ambiguity": self.ambiguity,
+            "constraint_clarity": self.constraint_clarity,
+            "model_compatibility": self.model_compatibility,
+            "overall_quality": self.overall_quality,
+            "overall_score": self.overall_score,
+            "weaknesses": self.weaknesses,
+            "improvements": self.improvements,
+            "rationale": self.rationale,
+        }
+
+    @classmethod
+    def fallback(cls) -> "PromptQualityScore":
+        """Return a safe default when LLM parsing fails."""
+        return cls(
+            overall_score=50,
+            weaknesses=["Evaluation parsing failed"],
+            improvements=["Re-run critic with simpler prompt"],
+        )
+
+class UserRequest(BaseModel):
+    text: str
+    context: Optional[str] = None
+    target_model: Optional[str] = None
+    output_format: str = "markdown"
+    quality_mode: str = "balanced"
+    max_tokens: Optional[int] = None
+    session_id: Optional[str] = None
+    user_preferences: Optional[dict] = None
+
+class FinalOutput(BaseModel):
+    optimized_prompt: str
+    quality_scores: PromptQualityScore
+    specification: PromptStrategy
+    alternatives: dict[str, str] = Field(default_factory=dict)
+    explanation: str = ""
+    processing_stats: dict[str, Any] = Field(default_factory=dict)
+    pipeline_version: str = "Kirator-v2.0"

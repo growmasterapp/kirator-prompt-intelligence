@@ -1,0 +1,29 @@
+﻿[tool.poetry]
+name = "kirator-prompt-factory"
+version = "0.1.0"
+description = "Compiler-grade prompt engineering pipeline with 9-stage architecture"
+authors = ["Kirator AI Team"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pydantic = "^2.0"
+pydantic-settings = "^2.0"
+chromadb = "^0.4.0"
+ollama = "^0.1.0"
+numpy = "^1.24.0"
+PyYAML = "^6.0"
+rich = "^13.0"
+click = "^8.1"
+python-dotenv = "^1.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+black = "^23.0"
+mypy = "^1.5"
+ruff = "^0.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
