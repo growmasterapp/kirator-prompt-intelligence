@@ -556,13 +556,15 @@ class RequestRouter:
             # Log what we detected (DETAILED LOGGING!)
             matched_kws = sorted_categories[0][1].get('matched_keywords', [])
             desc = sorted_categories[0][1].get('description', '')
-            print(f"[Router] ═══════════════════════════════════════")
-            print(f"[Router] 📊 CATEGORY DETECTED: {best_category_name}")
-            print(f"[Router] 🎯 Confidence: {confidence:.2f} | Score: {best_score:.1f}")
-            f"[Router] 🔑 Keywords: {', '.join(matched_kws[:8])}"
+            logger.info(
+                "Router category=%s confidence=%.2f score=%.1f keywords=%s",
+                best_category_name,
+                confidence,
+                best_score,
+                ", ".join(matched_kws[:8]),
+            )
             if desc:
-                print(f"[Router] 💡 Context: {desc}")
-            print(f"[Router] ═══════════════════════════════════════")
+                logger.info("Router context: %s", desc)
             
         else:
             # Fallback to general

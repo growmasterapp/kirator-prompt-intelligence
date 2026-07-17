@@ -31,6 +31,7 @@ def _extract_prompt(raw: str) -> str:
     text = raw.strip()
     # Remove thinking blocks
     text = re.sub(r"__(?:START|END) THINKING__", "", text, flags=re.DOTALL)
+    text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE)
     text = re.sub(r"__[A-Z\s]+__", "", text)
     # Remove "Here is the prompt:" type prefixes
     text = re.sub(
@@ -47,6 +48,62 @@ def _extract_prompt(raw: str) -> str:
         flags=re.IGNORECASE | re.DOTALL,
     )
     return text.strip()
+
+
+_MONEY_RE = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?(?:\s?[kKmMbB])?")
+_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+_VERSION_RE = re.compile(r"\b(?:v?\d+\.\d+(?:\.\d+)?)\b")
+_PROPER_NOUN_RE = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b")
+_COMMON_FALSE_PROPER = {
+    "Chain of Thought",
+    "Few Shot",
+    "Output Format",
+    "Clarification Needed",
+    "Quality Check",
+    "Self Check",
+    "Reasoning Instructions",
+}
+
+
+def _find_invented_details(prompt: str, original: str) -> list[str]:
+    """Heuristic: flag concrete tokens in the prompt that do not appear in the user request."""
+    original_l = original.lower()
+    flags: list[str] = []
+
+    for match in _MONEY_RE.findall(prompt):
+        if match.lower().replace(" ", "") not in original_l.replace(" ", ""):
+            flags.append(f"dollar amount `{match}`")
+
+    for match in _YEAR_RE.findall(prompt):
+        if match not in original:
+            flags.append(f"year `{match}`")
+
+    # Specific tech stacks often hallucinated into vague requests
+    tech_tokens = [
+        "oauth", "jwt", "node.js", "nodejs", "kubernetes", "postgres",
+        "mongodb", "react native", "fastapi", "django", "flask",
+    ]
+    for token in tech_tokens:
+        if token in prompt.lower() and token not in original_l:
+            # Allow common technique/framework mentions only when request is code-ish
+            if any(k in original_l for k in ("code", "api", "function", "python", "javascript", "app")):
+                continue
+            flags.append(f"technology `{token}`")
+
+    for match in _PROPER_NOUN_RE.findall(prompt):
+        if match in _COMMON_FALSE_PROPER:
+            continue
+        if match.lower() not in original_l and len(match.split()) >= 2:
+            flags.append(f"name `{match}`")
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for item in flags:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+    return unique
 
 
 # ================================================================
@@ -302,7 +359,8 @@ class PromptComposer:
         )
 
         raw = self.llm.generate(user_prompt, system_prompt=system_prompt)
-        return _extract_prompt(raw)
+        prompt = _extract_prompt(raw)
+        return self._apply_anti_hallucination_guard(prompt, request)
 
     def _compose_from_templates(self, request, strategy, intent, difficulty) -> str:
         """
@@ -357,6 +415,25 @@ class PromptComposer:
             parts.append("\n# OUTPUT FORMAT\nProvide a clear, well-structured response.")
 
         return "\n".join(parts)
+
+    def _apply_anti_hallucination_guard(self, prompt: str, original_request: str) -> str:
+        """Append a clarification block when the draft invents concrete details."""
+        if not prompt:
+            return prompt
+
+        invented = _find_invented_details(prompt, original_request)
+        if not invented:
+            return prompt
+
+        logger.warning("Anti-hallucination guard flagged details: %s", invented[:5])
+        clarifications = "\n".join(f"- Clarify: {item}" for item in invented[:6])
+        return (
+            f"{prompt.rstrip()}\n\n"
+            "# CLARIFICATION NEEDED\n"
+            "The following details were not explicitly provided by the user. "
+            "Ask the user to confirm or supply them before assuming values:\n"
+            f"{clarifications}\n"
+        )
 
     def compose_simple(self, request_text: str, technique_ids: list[str] | None = None) -> str:
         """Quick composition without full pipeline context (for tests / CLI)."""

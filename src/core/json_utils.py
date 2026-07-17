@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 _THINKING_BLOCK_RE = re.compile(
     r"__(?:START|END)\s*THINKING__", re.DOTALL
 )
+_THINK_TAG_RE = re.compile(r"<think>[\s\S]*?</think>", re.IGNORECASE)
 _CODE_FENCE_OPEN_RE = re.compile(r"```(?:json)?\s*")
 _CODE_FENCE_CLOSE_RE = re.compile(r"```\s*$")
 _THINKING_EMOJI_RE = re.compile(r"[\U0001f9ec].*?[\U0001f4a4]", re.DOTALL)
@@ -57,8 +58,9 @@ def extract_json(raw: str) -> str:
     text = _CODE_FENCE_OPEN_RE.sub("", text)
     text = _CODE_FENCE_CLOSE_RE.sub("", text)
 
-    # Strip thinking blocks
+    # Strip thinking blocks (DeepSeek markers + <think> tags)
     text = _THINKING_BLOCK_RE.sub("", text)
+    text = _THINK_TAG_RE.sub("", text)
     text = _THINKING_EMOJI_RE.sub("", text)
     text = text.strip()
 
