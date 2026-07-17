@@ -1,0 +1,5 @@
+# Development / QA dependencies (install on top of requirements.txt)
+-r requirements.txt
+pytest>=8.0.0
+pytest-timeout>=2.3.0
+playwright>=1.42.0

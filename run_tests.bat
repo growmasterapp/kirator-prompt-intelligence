@@ -11,10 +11,15 @@ REM   run_tests.bat --quick      Quick 4-test smoke test
 REM   run_tests.bat --id T03     Run a single test
 REM   run_tests.bat --target claude   Only Claude targets
 REM   run_tests.bat --parallel 2      Run 2 tests at once
+REM
+REM For overnight ship-readiness (unit+API+GUI+pipeline):
+REM   run_overnight_tests.bat
+REM For GUI button/function automation only:
+REM   run_gui_tests.bat
 REM ============================================================
 
 echo ============================================================
-echo   KIRATOR PROMPT INTELLIGENCE - TEST BATTERY
+echo   KIRATOR PROMPT INTELLIGENCE - PIPELINE TEST BATTERY
 echo ============================================================
 echo.
 

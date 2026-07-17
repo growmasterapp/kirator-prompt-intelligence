@@ -12,6 +12,8 @@ venv/
 *.log
 .kirator/
 src/data/chroma_techniques/
+test_results/
+.pytest_cache/
 *.zip
 .DS_Store
 Thumbs.db
