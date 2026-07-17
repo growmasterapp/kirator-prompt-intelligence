@@ -197,12 +197,18 @@ Derived from the Kirator Designs mark (line-art paw, dual dogs, circuit nodes wi
 
 ---
 
-## 8. Immediate Next Commits (Phase 0–1)
+## 8. Progress (as of 2026-07-17)
 
-1. `chore(brand): add logo assets and design tokens`  
-2. `fix(deps): add Flask/httpx; document bge-m3`  
-3. `refactor(core): config + logging foundations`  
-4. `refactor(pipeline): extract PipelineService from GUI`  
-5. `feat(reliability): cancel + progress contract`  
-6. `fix(pipeline): S7/S6/S1 hardening from worklog`  
-7. `feat(ui): workflow-first layout on brand tokens`
+Completed:
+- Brand logo + design tokens + workflow-first GUI
+- Central config/logging; Flask/httpx deps; `bge-m3` documented
+- `PipelineService` extracted with cooperative cancel
+- Durable history under `~/.kirator/prompt_intelligence`
+- Target profiles module; Prompt Architect agent façade
+- Anti-hallucination post-guard; think-tag JSON stripping; S4↔S5 merge
+
+Next:
+- Merge recovered plugin loader + reverse-engineer mode
+- Onboarding / first-run Ollama checklist in UI
+- Release smoke tests as a ship gate
+- Optional pywebview native shell
