@@ -68,16 +68,11 @@ User request (+ target model)
 - Session history is RAM-only; lost on restart
 - Chroma data under `src/data/chroma_techniques/`
 
-### 2.6 Recovered tree (not live)
+### 2.6 Extensibility (live)
 
-`recovered/` contains newer/extra modules the live `src/` lacks:
-
-- Plugin system (`base.py`, `loader.py`, sample plugins)
-- `memory.py`, `confidence.py`, `adaptive_length.py`, `model_profiles.py`
-- Reverse engineer stage
-- Richer GUI variants / worklog with known bugs
-
-**Decision:** Treat live `src/` as runtime truth; selectively merge proven `recovered/` modules after hardening.
+Plugin loader + sample critic ship under `plugins/` and `src/plugins/`.  
+Agent façade: `src/agents/prompt_architect.py`.  
+The old `recovered/` backup tree was removed after useful pieces were merged.
 
 ---
 
@@ -142,7 +137,7 @@ Derived from the Kirator Designs mark (line-art paw, dual dogs, circuit nodes wi
 
 **Motion:** stage pulse, shimmer on Run, fade-in logs, soft panel border glow on active.  
 **Icons:** monoline, matching logo stroke weight.  
-**Logo file:** `src/gui/static/logo.png` (+ `assets/brand/kirator-logo.png`).
+**Logo file:** `src/gui/static/logo.png`.
 
 ---
 

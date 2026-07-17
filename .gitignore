@@ -5,6 +5,7 @@
 .eggs/
 dist/
 build/
+logs/
 *.spec
 .env
 .venv/
@@ -17,3 +18,4 @@ test_results/
 *.zip
 .DS_Store
 Thumbs.db
+recovered/
