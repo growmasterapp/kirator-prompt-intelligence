@@ -1,0 +1,17 @@
+﻿__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.spec
+.env
+.venv/
+venv/
+*.log
+.kirator/
+src/data/chroma_techniques/
+*.zip
+.DS_Store
+Thumbs.db
