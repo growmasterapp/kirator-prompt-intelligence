@@ -33,6 +33,28 @@ class PipelineService:
         self._cancel_event = threading.Event()
         self._worker: threading.Thread | None = None
         self._state: dict[str, Any] = self._idle_state()
+        self._plugin_loader = None
+        self._init_plugins()
+
+    def _init_plugins(self) -> None:
+        """Best-effort plugin discovery — never blocks pipeline startup."""
+        try:
+            from src.core.config import project_root
+            from src.plugins.loader import PluginLoader
+
+            loader = PluginLoader(project_root=str(project_root()))
+            loader.discover()
+            activated = loader.load_all()
+            self._plugin_loader = loader
+            logger.info("Plugins ready: %s active", activated)
+        except Exception as e:
+            logger.warning("Plugin system unavailable: %s", e)
+            self._plugin_loader = None
+
+    def list_plugins(self) -> list[dict]:
+        if not self._plugin_loader:
+            return []
+        return self._plugin_loader.get_summary()
 
     @staticmethod
     def _idle_state() -> dict[str, Any]:
@@ -374,6 +396,23 @@ class PipelineService:
             for w in s7_weaknesses:
                 self.add_log(f"      Weakness: {w}")
 
+            plugin_critic_notes: dict[str, Any] = {}
+            if self._plugin_loader:
+                try:
+                    from src.plugins.base import PluginType
+
+                    for plugin in self._plugin_loader.get_active_plugins(PluginType.CRITIC):
+                        extra = plugin.evaluate(p, target_model)
+                        if isinstance(extra, dict):
+                            plugin_critic_notes[plugin.PLUGIN_ID] = extra
+                            risk = extra.get("hallucination_risk")
+                            if risk:
+                                self.add_log(
+                                    f"[S7+] {plugin.PLUGIN_NAME}: hallucination risk={risk}"
+                                )
+                except Exception as e:
+                    logger.warning("Critic plugin enrichment failed: %s", e)
+
             # S8
             self._check_cancel()
             t0 = time.time()
@@ -440,6 +479,8 @@ class PipelineService:
                 final_improvements = [final_improvements]
             report_dict["weaknesses"] = final_weaknesses
             report_dict["improvements"] = final_improvements
+            if plugin_critic_notes:
+                report_dict["plugin_critics"] = plugin_critic_notes
 
             result = {
                 "request": request_text,
@@ -453,6 +494,7 @@ class PipelineService:
                 "logs": [],
                 "iterations_used": r.get("iterations_used", 1),
                 "converged": r.get("converged", False),
+                "plugins": plugin_critic_notes,
             }
 
             with self._lock:

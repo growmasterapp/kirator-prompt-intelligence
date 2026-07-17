@@ -106,6 +106,12 @@ def api_history():
     return jsonify({"history": items, "count": len(items)})
 
 
+@app.route("/api/plugins")
+def api_plugins():
+    plugins = pipeline.list_plugins()
+    return jsonify({"plugins": plugins, "count": len(plugins)})
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print(f"  {settings.project_name}")
