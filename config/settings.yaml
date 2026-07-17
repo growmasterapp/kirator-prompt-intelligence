@@ -1,5 +1,26 @@
 project:
-  name: Kirator Prompt Factory
+  name: Kirator Prompt Intelligence
+  version: "1.1.0"
 
 ollama:
   base_url: http://localhost:11434
+  reasoning_model: deepseek-r1:8b
+  composition_model: llama3.1:8b
+  embedding_model: bge-m3
+  timeout_seconds: 120
+  max_retries: 2
+
+server:
+  host: 127.0.0.1
+  port: 5000
+  browser_delay_seconds: 3.0
+
+pipeline:
+  quality_threshold: 85
+  max_optimize_iterations: 2
+  history_max: 50
+  poll_dedupe_seconds: 5.0
+
+paths:
+  data_dir: src/data
+  # user_data_dir defaults to ~/.kirator/prompt_intelligence

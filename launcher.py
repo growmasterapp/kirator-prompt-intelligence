@@ -99,15 +99,26 @@ def open_browser_after_delay(port, delay=2):
 
 
 def main():
-    PORT = 5000
-    REQUIRED_MODELS = ["deepseek-r1:8b", "llama3.1:8b"]
-
     base_path = get_base_path()
 
     # When running as a frozen exe, add the base path to sys.path
     # so that 'from src.gui.app import app' still works
     if getattr(sys, 'frozen', False):
         sys.path.insert(0, base_path)
+    else:
+        sys.path.insert(0, base_path)
+
+    from src.core.config import get_settings
+    from src.core.logging_setup import setup_logging
+
+    settings = get_settings()
+    setup_logging()
+    PORT = settings.server.port
+    REQUIRED_MODELS = [
+        settings.ollama.reasoning_model,
+        settings.ollama.composition_model,
+        settings.ollama.embedding_model,
+    ]
 
     print()
     print("=" * 62)
@@ -191,7 +202,7 @@ def main():
     # Start browser opener in background thread
     browser_thread = threading.Thread(
         target=open_browser_after_delay,
-        args=(PORT, 3),
+        args=(PORT, settings.server.browser_delay_seconds),
         daemon=True
     )
     browser_thread.start()
@@ -218,7 +229,7 @@ def main():
     print(f"DONE")
     print()
     print("-" * 62)
-    print(f"  Server running at: http://127.0.0.1:{PORT}")
+    print(f"  Server running at: http://{settings.server.host}:{PORT}")
     print("  Your browser should open automatically.")
     print("  If it doesn't, open the URL above manually.")
     print("  Press Ctrl+C to stop the server.")
@@ -226,7 +237,7 @@ def main():
     print()
 
     # Run the Flask app (this blocks until Ctrl+C)
-    app.run(host="127.0.0.1", port=PORT, threaded=True)
+    app.run(host=settings.server.host, port=PORT, threaded=True)
 
 
 if __name__ == "__main__":

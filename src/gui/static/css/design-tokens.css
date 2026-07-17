@@ -1,0 +1,70 @@
+/**
+ * Kirator Designs — Design Tokens
+ * Derived from the official logo: deep forest ground, sage linework, neon circuit glow.
+ */
+
+:root {
+  /* Surfaces */
+  --kd-bg-deep: #0a120e;
+  --kd-bg-panel: #0c1a15;
+  --kd-bg-inset: #080f0c;
+  --kd-bg-elevated: #0f1a14;
+
+  /* Borders */
+  --kd-border: #1e3a2f;
+  --kd-border-strong: #2d5a42;
+  --kd-border-glow: rgba(168, 255, 156, 0.35);
+
+  /* Brand greens */
+  --kd-sage: #7aa37a;
+  --kd-sage-muted: #3d6e54;
+  --kd-mint: #a8ff9c;
+  --kd-mint-soft: #6ee7b7;
+  --kd-mint-dim: #4ade80;
+
+  /* Text */
+  --kd-text: #d4e8d8;
+  --kd-text-muted: #6b8f6b;
+  --kd-text-faint: #2d5a42;
+
+  /* Semantic */
+  --kd-danger: #ef4444;
+  --kd-danger-soft: #fca5a5;
+  --kd-warn: #f97316;
+  --kd-warn-soft: #fdba74;
+
+  /* Radii */
+  --kd-radius-sm: 8px;
+  --kd-radius-md: 12px;
+  --kd-radius-lg: 16px;
+  --kd-radius-pill: 999px;
+
+  /* Shadows / glow */
+  --kd-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --kd-shadow-glow: 0 0 24px rgba(168, 255, 156, 0.18);
+  --kd-shadow-btn: 0 8px 30px rgba(168, 255, 156, 0.22);
+
+  /* Typography */
+  --kd-font-ui: "Sora", "Segoe UI", system-ui, sans-serif;
+  --kd-font-mono: "Cascadia Code", "Fira Code", ui-monospace, monospace;
+  --kd-tracking-brand: 0.35em;
+  --kd-tracking-label: 0.18em;
+
+  /* Motion */
+  --kd-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --kd-duration-fast: 150ms;
+  --kd-duration: 220ms;
+  --kd-duration-slow: 400ms;
+
+  /* Layout */
+  --kd-nav-h: 56px;
+  --kd-container: 1240px;
+  --kd-gap: 24px;
+}
+
+/* Focus ring — circuit-node style */
+:focus-visible {
+  outline: 2px solid var(--kd-mint);
+  outline-offset: 2px;
+  box-shadow: var(--kd-shadow-glow);
+}
