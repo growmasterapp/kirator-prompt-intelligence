@@ -4,6 +4,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.core.models import DifficultyAssessment, ComplexityLevel
+from src.core.exceptions import reraise_if_cancelled
 from src.core.json_utils import extract_json, parse_json_with_retry
 from src.models.ollama_client import OllamaClient
 
@@ -43,6 +44,7 @@ TASK: """ + request
                 confidence=float(data.get("confidence", 0.8))
             )
         except Exception as e:
+            reraise_if_cancelled(e)
             logger.error(f"Difficulty analysis failed: {e}")
 
         return DifficultyAssessment(

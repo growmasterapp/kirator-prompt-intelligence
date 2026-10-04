@@ -1,0 +1,25 @@
+﻿__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+logs/
+*.spec
+.env
+.venv/
+venv/
+*.log
+.kirator/
+# Per-install Flask secret. Created on first run. Never commit it.
+secret_key
+*.secret
+src/data/chroma_techniques/
+test_results/
+.pytest_cache/
+.pytest-user-data/
+*.zip
+.DS_Store
+Thumbs.db
+recovered/

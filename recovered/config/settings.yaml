@@ -1,5 +1,0 @@
-project:
-  name: Kirator Prompt Factory
-
-ollama:
-  base_url: http://localhost:11434

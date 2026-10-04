@@ -4,6 +4,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.core.models import IntentAnalysis
+from src.core.exceptions import reraise_if_cancelled
 from src.core.json_utils import extract_json, parse_json_with_retry
 from src.models.ollama_client import OllamaClient
 
@@ -38,6 +39,7 @@ USER REQUEST: """ + request
                 confidence=float(data.get("confidence", 0.75))
             )
         except Exception as e:
+            reraise_if_cancelled(e)
             logger.error(f"Intent analysis failed: {e}")
 
         return IntentAnalysis(

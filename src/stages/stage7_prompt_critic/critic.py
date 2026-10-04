@@ -6,6 +6,7 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.core.models import PromptQualityScore
+from src.core.exceptions import reraise_if_cancelled
 from src.core.json_utils import extract_json, parse_json_with_retry
 from src.models.ollama_client import OllamaClient
 
@@ -190,6 +191,7 @@ class PromptCritic:
                     f"Critic JSON parse failed (LLM attempt {llm_attempt}/{max_llm_retries}): {e}"
                 )
             except Exception as e:
+                reraise_if_cancelled(e)
                 last_error = e
                 logger.error(
                     f"Critic evaluation error (LLM attempt {llm_attempt}/{max_llm_retries}): {e}"

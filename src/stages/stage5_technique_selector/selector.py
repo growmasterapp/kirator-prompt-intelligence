@@ -350,6 +350,8 @@ class TechniqueSelector:
                     })
             return out if out else self._search_keyword(query_text, n)
         except Exception as e:
+            from src.core.exceptions import reraise_if_cancelled
+            reraise_if_cancelled(e)
             logger.warning(f"ChromaDB search failed, falling back to keywords: {e}")
             return self._search_keyword(query_text, n)
 
