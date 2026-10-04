@@ -22,6 +22,7 @@ import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.stages.stage5_technique_selector.selector import TechniqueSelector
+from src.core.exceptions import reraise_if_cancelled
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +275,7 @@ class PromptComposer:
             if result and len(result) > 50:
                 return result
         except Exception as e:
+            reraise_if_cancelled(e)
             logger.warning(f"LLM composition failed, using template fallback: {e}")
 
         # Fallback to template-based composition

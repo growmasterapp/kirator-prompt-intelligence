@@ -19,6 +19,11 @@ from src.core.history_store import HistoryStore
 from src.core.logging_setup import get_logger
 from src.core.models import TechniqueMetadata
 from src.core.target_profiles import get_target_profile
+from src.pipeline.fast_mode import (
+    difficulty_from_router,
+    result_without_optimizer,
+    should_use_fast_mode,
+)
 
 logger = get_logger(__name__)
 
@@ -29,11 +34,13 @@ class PipelineService:
     def __init__(self, history: HistoryStore | None = None):
         self.settings = get_settings()
         self.history = history or HistoryStore()
-        self._lock = threading.Lock()
+        self._lock = threading.Condition()
         self._cancel_event = threading.Event()
         self._worker: threading.Thread | None = None
         self._state: dict[str, Any] = self._idle_state()
         self._plugin_loader = None
+        self._clients: list[Any] = []
+        self._serial = 0
         self._init_plugins()
 
     def _init_plugins(self) -> None:
@@ -68,6 +75,7 @@ class PipelineService:
             "error": None,
             "request_hash": None,
             "cancelled": False,
+            "fast_mode": False,
         }
 
     # ------------------------------------------------------------------
@@ -79,16 +87,43 @@ class PipelineService:
         line = f"[{ts}] {msg}"
         with self._lock:
             self._state["log_messages"].append(line)
+            self._publish_locked()
         logger.info(msg)
 
-    def set_stage(self, num: int, name: str, detail: str, elapsed: float) -> None:
+    def _publish_locked(self) -> None:
+        """Tell the live event stream that something changed. Call with the lock held."""
+        self._serial += 1
+        self._lock.notify_all()
+
+    def begin_stage(self, num: int, name: str, detail: str = "Running…") -> None:
+        """Mark a stage as running so the GUI can show it before the model returns."""
         with self._lock:
             self._state["current_stage"] = str(num)
             self._state["stage_progress"][str(num)] = {
                 "name": name,
                 "detail": detail,
-                "time": round(elapsed, 1),
+                "time": None,
+                "state": "active",
             }
+            self._publish_locked()
+
+    def set_stage(
+        self,
+        num: int,
+        name: str,
+        detail: str,
+        elapsed: float,
+        state: str = "done",
+    ) -> None:
+        with self._lock:
+            self._state["current_stage"] = str(num)
+            self._state["stage_progress"][str(num)] = {
+                "name": name,
+                "detail": detail,
+                "time": round(elapsed, 1) if elapsed is not None else None,
+                "state": state,
+            }
+            self._publish_locked()
 
     def _check_cancel(self) -> None:
         if self._cancel_event.is_set():
@@ -96,14 +131,27 @@ class PipelineService:
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            return {
+            payload = {
                 "status": self._state["status"],
                 "current_stage": self._state["current_stage"],
                 "stages": dict(self._state["stage_progress"]),
                 "recent_logs": list(self._state["log_messages"][-12:]),
                 "error": self._state.get("error"),
                 "cancelled": self._state.get("cancelled", False),
+                "serial": self._serial,
+                "fast_mode": bool(self._state.get("fast_mode", False)),
             }
+            if payload["status"] in ("complete", "error", "cancelled"):
+                payload["result"] = self._state.get("result")
+            return payload
+
+    def wait_for_update(self, last_serial: int, timeout: float = 12.0) -> int:
+        """Block until the run changes, or until timeout. Used by the live event stream."""
+        with self._lock:
+            if self._serial != last_serial:
+                return self._serial
+            self._lock.wait(timeout=timeout)
+            return self._serial
 
     def consume_terminal(self) -> dict[str, Any] | None:
         """Return and clear a completed/error/cancelled result (one-shot for polling)."""
@@ -174,6 +222,7 @@ class PipelineService:
                 "error": None,
                 "request_hash": req_hash,
                 "cancelled": False,
+                "fast_mode": False,
             }
 
         self._worker = threading.Thread(
@@ -188,7 +237,7 @@ class PipelineService:
             "status": "started",
             "target_model": target_model,
             "message": "Pipeline started successfully",
-            "note": "This may take 1–3 minutes depending on complexity",
+            "note": "Simple requests use fast mode and finish sooner. Larger ones can take a couple of minutes.",
         }
 
     def cancel(self) -> dict[str, Any]:
@@ -198,12 +247,31 @@ class PipelineService:
                     "status": "idle",
                     "message": "No pipeline is currently running",
                 }
+            clients = list(self._clients)
+        # Set the flag first so stage code and model calls notice immediately.
         self._cancel_event.set()
-        self.add_log("Cancel requested — stopping after current stage…")
+        for client in clients:
+            abort = getattr(client, "abort", None)
+            if abort is None:
+                continue
+            try:
+                abort()
+            except Exception:
+                logger.debug("Could not abort a model client", exc_info=True)
+        self.add_log("Cancel requested — stopping now…")
         return {
             "status": "cancel_requested",
-            "message": "Cancellation requested. The run will stop between stages.",
+            "message": "Cancellation requested. The run will stop.",
         }
+
+    def _watch_clients(self, *clients: Any) -> None:
+        """Remember the model clients for this run so Cancel can close them."""
+        for client in clients:
+            bind = getattr(client, "bind_cancel", None)
+            if bind:
+                bind(self._cancel_event)
+        with self._lock:
+            self._clients = list(clients)
 
     # ------------------------------------------------------------------
     # Stage execution
@@ -220,6 +288,7 @@ class PipelineService:
             self.add_log(f"Model hint: {profile.hint}")
         self.add_log("=" * 50)
 
+        fast = False
         try:
             self._check_cancel()
             self.add_log("[INIT] Importing modules…")
@@ -245,6 +314,7 @@ class PipelineService:
                 base_url=ollama.base_url, default_model=ollama.composition_model
             )
 
+            self._watch_clients(embedder, reasoning, composition)
             s1 = RequestRouter(embedder)
             s2 = IntentAnalyzer(reasoning)
             s3 = DifficultyAnalyzer(reasoning)
@@ -256,10 +326,15 @@ class PipelineService:
             s9 = PromptRenderer()
             self.add_log("[INIT] All 9 stages ready")
 
-            # S1
+            # S1 — the router decides whether this request is easy enough for fast mode.
             self._check_cancel()
+            self.begin_stage(1, "Router", "Classifying request…")
             t0 = time.time()
             c = s1.process(request_text, {})
+            fast = should_use_fast_mode(c, enabled=self.settings.pipeline.fast_mode)
+            with self._lock:
+                self._state["fast_mode"] = fast
+                self._publish_locked()
             self.set_stage(
                 1,
                 "Router",
@@ -269,24 +344,41 @@ class PipelineService:
             self.add_log(
                 f"[S1] Router: {c.task_category.value} | {c.complexity_level.value}"
             )
+            if fast:
+                self.add_log(
+                    "[FAST] Easy request — skipping difficulty (S3) and optimizer (S8)."
+                )
 
-            # S2 + S3 parallel
+            # S2 always runs. S3 is a second model call, so fast mode skips it.
             self._check_cancel()
-            self.add_log("[S2+S3] Running intent + difficulty in parallel…")
+            self.begin_stage(2, "Intent", "Reading what you want…")
+            if fast:
+                self.set_stage(3, "Difficulty", "skipped — fast mode", 0.0, state="skipped")
+                t0 = time.time()
+                i = s2.process(request_text, {})
+                s2_time = time.time() - t0
+                d = difficulty_from_router(c)
+            else:
+                self.begin_stage(3, "Difficulty", "Judging how hard this is…")
+                self.add_log("[S2+S3] Running intent + difficulty in parallel…")
 
-            def run_s2():
-                t = time.time()
-                return s2.process(request_text, {}), time.time() - t
+                def run_s2():
+                    t = time.time()
+                    return s2.process(request_text, {}), time.time() - t
 
-            def run_s3():
-                t = time.time()
-                return s3.process(request_text, {}, intent=None), time.time() - t
+                def run_s3():
+                    t = time.time()
+                    return s3.process(request_text, {}, intent=None), time.time() - t
 
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                fut2 = pool.submit(run_s2)
-                fut3 = pool.submit(run_s3)
-                i, s2_time = fut2.result()
-                d, s3_time = fut3.result()
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    fut2 = pool.submit(run_s2)
+                    fut3 = pool.submit(run_s3)
+                    try:
+                        i, s2_time = fut2.result()
+                        d, s3_time = fut3.result()
+                    except PipelineCancelled:
+                        pool.shutdown(wait=False, cancel_futures=True)
+                        raise
 
             self._check_cancel()
             self.set_stage(
@@ -298,18 +390,24 @@ class PipelineService:
             self.add_log(
                 f"[S2] Intent: {i.primary_intent} | conf:{round(i.confidence, 2)}"
             )
-            self.set_stage(
-                3,
-                "Difficulty",
-                f"{d.overall_level.value} | tech:{d.technical_complexity}/10",
-                s3_time,
-            )
-            self.add_log(
-                f"[S3] Difficulty: {d.overall_level.value} | tech:{d.technical_complexity}/10"
-            )
+            if fast:
+                self.add_log(
+                    f"[S3] Difficulty: skipped ({d.overall_level.value}, taken from the router)"
+                )
+            else:
+                self.set_stage(
+                    3,
+                    "Difficulty",
+                    f"{d.overall_level.value} | tech:{d.technical_complexity}/10",
+                    s3_time,
+                )
+                self.add_log(
+                    f"[S3] Difficulty: {d.overall_level.value} | tech:{d.technical_complexity}/10"
+                )
 
             # S4
             self._check_cancel()
+            self.begin_stage(4, "Strategy", "Planning the prompt…")
             t0 = time.time()
             self.add_log(f"[S4] Strategy planning ({ollama.reasoning_model})…")
             sr = s4.process(request_text, {}, c, i, d)
@@ -324,6 +422,7 @@ class PipelineService:
 
             # S5 — merge supplements into strategy
             self._check_cancel()
+            self.begin_stage(5, "Techniques", "Picking techniques…")
             t0 = time.time()
             tk = s5.search(request_text, 5)
             s4_ids = {t.id for t in sr.selected_techniques if t.id}
@@ -371,6 +470,7 @@ class PipelineService:
 
             # S6
             self._check_cancel()
+            self.begin_stage(6, "Compose", "Writing the prompt…")
             t0 = time.time()
             self.add_log(f"[S6] Composing prompt ({ollama.composition_model})…")
             p = s6.compose(request_text, sr, c, i, d)
@@ -379,6 +479,7 @@ class PipelineService:
 
             # S7
             self._check_cancel()
+            self.begin_stage(7, "Critic", "Scoring the prompt…")
             t0 = time.time()
             self.add_log(f"[S7] PEEM evaluation ({ollama.composition_model})…")
             q = s7.evaluate(p, target_model)
@@ -410,40 +511,50 @@ class PipelineService:
                                 self.add_log(
                                     f"[S7+] {plugin.PLUGIN_NAME}: hallucination risk={risk}"
                                 )
+                except PipelineCancelled:
+                    raise
                 except Exception as e:
                     logger.warning("Critic plugin enrichment failed: %s", e)
 
-            # S8
+            # S8 — the optimizer loop is the slow tail. Fast mode keeps the critic score.
             self._check_cancel()
-            t0 = time.time()
-            threshold = self.settings.pipeline.quality_threshold
-            max_iter = self.settings.pipeline.max_optimize_iterations
-            self.add_log(f"[S8] Optimizing (target: {threshold}/100)…")
-            r = s8.optimize(
-                p,
-                target_model,
-                max_iterations=max_iter,
-                quality_threshold=threshold,
-            )
-            opt = r["optimized_prompt"]
-            improvement = r["final_score"] - q.overall_score
-            self.set_stage(
-                8,
-                "Optimize",
-                f"{r['final_score']}/100 ({improvement:+d} pts)",
-                time.time() - t0,
-            )
-            self.add_log(
-                f"[S8] Optimize: {r['final_score']}/100 ({improvement:+d} pts)"
-            )
-            if r.get("iterations_used"):
-                self.add_log(
-                    f"[S8] Iterations: {r['iterations_used']} | "
-                    f"Converged: {r.get('converged', False)}"
+            if fast:
+                self.set_stage(8, "Optimize", "skipped — fast mode", 0.0, state="skipped")
+                self.add_log("[S8] Optimizer skipped — using the critic score.")
+                r = result_without_optimizer(p, q)
+            else:
+                self.begin_stage(8, "Optimize", "Improving the prompt…")
+                t0 = time.time()
+                threshold = self.settings.pipeline.quality_threshold
+                max_iter = self.settings.pipeline.max_optimize_iterations
+                self.add_log(f"[S8] Optimizing (target: {threshold}/100)…")
+                r = s8.optimize(
+                    p,
+                    target_model,
+                    max_iterations=max_iter,
+                    quality_threshold=threshold,
                 )
+                improvement = r["final_score"] - q.overall_score
+                self.set_stage(
+                    8,
+                    "Optimize",
+                    f"{r['final_score']}/100 ({improvement:+d} pts)",
+                    time.time() - t0,
+                )
+                self.add_log(
+                    f"[S8] Optimize: {r['final_score']}/100 ({improvement:+d} pts)"
+                )
+                if r.get("iterations_used"):
+                    self.add_log(
+                        f"[S8] Iterations: {r['iterations_used']} | "
+                        f"Converged: {r.get('converged', False)}"
+                    )
+
+            opt = r["optimized_prompt"]
 
             # S9
             self._check_cancel()
+            self.begin_stage(9, "Render", "Packaging the result…")
             t0 = time.time()
             out = s9.render(
                 opt,
@@ -495,6 +606,7 @@ class PipelineService:
                 "iterations_used": r.get("iterations_used", 1),
                 "converged": r.get("converged", False),
                 "plugins": plugin_critic_notes,
+                "fast_mode": fast,
             }
 
             with self._lock:
@@ -502,6 +614,7 @@ class PipelineService:
                 result["logs"] = self._state["log_messages"].copy()
                 self._state["status"] = "complete"
                 self._state["result"] = result
+                self._publish_locked()
 
             self.history.add(
                 request_text,
@@ -527,7 +640,9 @@ class PipelineService:
                     "logs": self._state["log_messages"].copy(),
                     "report": {"weaknesses": [], "improvements": []},
                     "stages": self._state["stage_progress"].copy(),
+                    "fast_mode": fast,
                 }
+                self._publish_locked()
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -553,6 +668,10 @@ class PipelineService:
                     "report": {"weaknesses": [], "improvements": []},
                     "stages": self._state["stage_progress"].copy(),
                 }
+                self._publish_locked()
+        finally:
+            with self._lock:
+                self._clients = []
 
 
 _service: PipelineService | None = None

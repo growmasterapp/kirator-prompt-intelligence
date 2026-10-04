@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kirator Prompt Intelligence</title>
 <link rel="stylesheet" href="/static/css/design-tokens.css">
+{% if brand_theme %}
+<link rel="stylesheet" href="{{ brand_theme }}">
+{% endif %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -52,6 +55,10 @@ body::before{
   width:92px;height:92px;object-fit:contain;
   filter:drop-shadow(0 0 10px rgba(168,255,156,.35));
 }
+.brand-fallback{
+  display:none;font-weight:800;letter-spacing:.08em;color:var(--kd-mint);font-size:22px;
+}
+.brand-mark.no-logo .brand-fallback{display:block}
 .brand-text{display:flex;flex-direction:column;gap:4px;min-width:0}
 .brand-name{
   font-size:clamp(15px, 2vw, 18px);font-weight:800;
@@ -238,6 +245,8 @@ textarea#requestInput::placeholder{color:var(--kd-text-faint)}
 }
 .stage-item.active{border-color:var(--kd-mint);box-shadow:var(--kd-shadow-glow)}
 .stage-item.done{border-color:#166534}
+.stage-item.skipped{border-color:#3d6e54;opacity:.75}
+.stage-item.skipped .stage-detail{font-style:italic}
 .stage-num{font-size:9px;letter-spacing:2px;color:var(--kd-text-faint);font-weight:800;text-transform:uppercase}
 .stage-item.active .stage-num{color:var(--kd-mint)}
 .stage-name{font-size:12px;font-weight:700;color:var(--kd-mint-soft);margin-top:4px}
@@ -365,7 +374,9 @@ pre#outputPre.empty{color:var(--kd-text-faint)}
   <header class="topbar">
     <div class="brand-lockup">
       <div class="brand-mark">
-        <img src="/static/logo.png" alt="Kirator Designs paw mark">
+        <img src="{{ logo_url }}" alt="Kirator Designs mark" width="92" height="92"
+             onerror="this.style.display='none'; this.parentNode.classList.add('no-logo');">
+        <span class="brand-fallback">KD</span>
       </div>
       <div class="brand-text">
         <div class="brand-name">Kirator Designs</div>
@@ -595,8 +606,9 @@ function setStage(num, name, detail, elapsed, state) {
   el.querySelector(".stage-detail").textContent = detail || "";
   var tm = el.querySelector(".stage-time");
   if (tm) tm.textContent = elapsed ? elapsed + "s" : "";
-  el.classList.remove("active","done");
+  el.classList.remove("active","done","skipped");
   if (state === "active") el.classList.add("active");
+  else if (state === "skipped") el.classList.add("skipped");
   else if (state === "done") el.classList.add("done");
 }
 
@@ -840,7 +852,7 @@ function runPipeline() {
   document.getElementById("beforeAfterToggle").classList.remove("active");
   document.getElementById("beforeLabel").classList.remove("visible");
   var pre = document.getElementById("outputPre");
-  pre.textContent = "Processing… this often takes 1–3 minutes.";
+  pre.textContent = "Working… simple requests finish in a few seconds. Bigger ones take longer.";
   pre.classList.remove("original-shown", "empty");
   document.getElementById("scoreDisplay").textContent = "--";
   document.getElementById("scoreDisplay").className = "score-big score-empty";
@@ -871,7 +883,7 @@ function runPipeline() {
         toast(res.data.error || "Could not start");
         return;
       }
-      startPolling();
+      startStreaming();
     }).catch(function(err) {
       addLog("ERROR: " + err.message);
       setRunningUi(false);
@@ -886,6 +898,103 @@ function cancelPipeline() {
     .then(function(data) { addLog(data.message || "Cancel requested"); toast("Cancelling…"); });
 }
 
+function paintStages(stages, status) {
+  if (!stages) return;
+  var keys = Object.keys(stages).map(function(k) { return parseInt(k, 10); });
+  keys.sort(function(a, b) { return a - b; });
+  var anyActive = false;
+  keys.forEach(function(num) {
+    var s = stages[String(num)];
+    if (!s) return;
+    if (s.state === "active") anyActive = true;
+    setStage(num, s.name, s.detail, s.time, s.state || "done");
+  });
+  if (!anyActive && status === "running") {
+    var next = keys.length ? keys[keys.length - 1] + 1 : 1;
+    if (next <= 9) setStage(next, stageNames[next], "Running…", null, "active");
+  }
+}
+
+function applySnapshot(data) {
+  if (!data || !data.status) return;
+  if (data.status === "running") {
+    paintStages(data.stages, "running");
+    if (data.recent_logs) {
+      var logs = data.recent_logs;
+      var startIdx = 0;
+      for (var j = logs.length - 1; j >= 0; j--) {
+        if (logs[j] === lastSeenLog) { startIdx = j + 1; break; }
+      }
+      for (var k = startIdx; k < logs.length; k++) {
+        addLog(logs[k].replace(/^\[.*?\]\s*/, ""));
+      }
+      if (logs.length > 0) lastSeenLog = logs[logs.length - 1];
+    }
+  } else if (data.status === "complete" && data.result) {
+    showResult(data.result);
+  } else if (data.status === "cancelled") {
+    addLog("Cancelled.");
+    if (data.result && data.result.rendered) {
+      var pre = document.getElementById("outputPre");
+      pre.textContent = data.result.rendered;
+      pre.classList.remove("empty");
+    }
+    setRunningUi(false);
+    setStatus("cancelled");
+    toast("Cancelled");
+  } else if (data.status === "error") {
+    addLog("ERROR: " + (data.error || "Pipeline failed"));
+    if (data.result && data.result.rendered) {
+      var pre2 = document.getElementById("outputPre");
+      pre2.textContent = data.result.rendered;
+      pre2.classList.remove("empty");
+    }
+    setRunningUi(false);
+    setStatus("error");
+    toast("Pipeline failed");
+  }
+}
+
+var streamSource = null;
+
+function stopStreaming() {
+  if (streamSource) {
+    streamSource.close();
+    streamSource = null;
+  }
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startStreaming() {
+  stopStreaming();
+  if (!window.EventSource) {
+    startPolling();
+    return;
+  }
+  var es = new EventSource("/api/events");
+  streamSource = es;
+  var sawTerminal = false;
+  es.onmessage = function(ev) {
+    var data;
+    try { data = JSON.parse(ev.data); } catch (e) { return; }
+    applySnapshot(data);
+    if (data.status === "complete" || data.status === "cancelled" || data.status === "error") {
+      sawTerminal = true;
+      stopStreaming();
+    }
+  };
+  es.onerror = function() {
+    if (sawTerminal) return;
+    stopStreaming();
+    if (document.getElementById("runBtn").classList.contains("running")) {
+      startPolling();
+    }
+  };
+}
+
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(checkStatus, 1200);
@@ -893,51 +1002,11 @@ function startPolling() {
 
 function checkStatus() {
   fetch("/api/status").then(function(r) { return r.json(); }).then(function(data) {
-    if (data.status === "running") {
-      if (data.stages) {
-        Object.keys(data.stages).forEach(function(key) {
-          var s = data.stages[key];
-          setStage(parseInt(key, 10), s.name, s.detail, s.time, "done");
-        });
-        var nextStage = Object.keys(data.stages).length + 1;
-        if (nextStage <= 9) setStage(nextStage, stageNames[nextStage], "Running…", null, "active");
-      }
-      if (data.recent_logs) {
-        var logs = data.recent_logs;
-        var startIdx = 0;
-        for (var j = logs.length - 1; j >= 0; j--) {
-          if (logs[j] === lastSeenLog) { startIdx = j + 1; break; }
-        }
-        for (var k = startIdx; k < logs.length; k++) {
-          addLog(logs[k].replace(/^\[.*?\]\s*/, ""));
-        }
-        if (logs.length > 0) lastSeenLog = logs[logs.length - 1];
-      }
-    } else if (data.status === "complete" && data.result) {
-      clearInterval(pollTimer); pollTimer = null;
-      showResult(data.result);
-    } else if (data.status === "cancelled") {
-      clearInterval(pollTimer); pollTimer = null;
-      addLog("Cancelled.");
-      if (data.result && data.result.rendered) {
-        var pre = document.getElementById("outputPre");
-        pre.textContent = data.result.rendered;
-        pre.classList.remove("empty");
-      }
-      setRunningUi(false);
-      setStatus("cancelled");
-      toast("Cancelled");
-    } else if (data.status === "error") {
-      clearInterval(pollTimer); pollTimer = null;
-      addLog("ERROR: " + (data.error || "Pipeline failed"));
-      if (data.result && data.result.rendered) {
-        var pre2 = document.getElementById("outputPre");
-        pre2.textContent = data.result.rendered;
-        pre2.classList.remove("empty");
-      }
-      setRunningUi(false);
-      setStatus("error");
-      toast("Pipeline failed");
+    var stillRunning = data.status === "running";
+    applySnapshot(data);
+    if (!stillRunning && data.status !== "idle") {
+      clearInterval(pollTimer);
+      pollTimer = null;
     }
   }).catch(function(err) { console.error("Poll error:", err); });
 }
@@ -949,7 +1018,7 @@ function showResult(r) {
   if (r.stages) {
     Object.keys(r.stages).forEach(function(key) {
       var s = r.stages[key];
-      setStage(parseInt(key, 10), s.name, s.detail, s.time, "done");
+      setStage(parseInt(key, 10), s.name, s.detail, s.time, s.state || "done");
     });
   }
   var pre = document.getElementById("outputPre");

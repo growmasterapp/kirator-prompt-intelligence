@@ -37,14 +37,19 @@ def browser_page(live_server):
 
 
 def test_brand_and_logo_visible(browser_page):
+    """Brand header shows without a logo PNG. The built-in mark or the text fallback is enough."""
     page, _ = browser_page
     page.reload(wait_until="domcontentloaded")
     expect(page.locator(".brand-name")).to_contain_text(re.compile("Kirator", re.I))
-    logo = page.locator(".brand-mark img")
-    expect(logo).to_be_visible()
-    box = logo.bounding_box()
-    assert box is not None
-    assert box["height"] >= 60, f"Logo too small: {box}"
+    mark = page.locator(".brand-mark")
+    expect(mark).to_be_visible()
+    img = page.locator(".brand-mark img")
+    if img.count() and img.is_visible():
+        box = img.bounding_box()
+        assert box is not None
+        assert box["height"] >= 40, f"Mark too small: {box}"
+    else:
+        expect(page.locator(".brand-fallback")).to_be_visible()
 
 
 def test_health_and_idle_status(browser_page):

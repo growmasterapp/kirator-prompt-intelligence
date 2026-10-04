@@ -24,14 +24,20 @@ def test_index_serves_branded_gui(client):
     html = resp.get_data(as_text=True)
     assert "Kirator" in html
     assert "Improve Prompt" in html
-    assert "/static/logo.png" in html
+    assert "brand-mark" in html
     assert "design-tokens.css" in html
+    # Built-in mark, a shipped PNG, or the optional brand kit. A PNG is not required.
+    assert "/static/mark.svg" in html or "/static/logo.png" in html or "/brand/logo" in html
 
 
-def test_logo_static_asset(client):
-    resp = client.get("/static/logo.png")
+def test_builtin_mark_does_not_need_a_logo_png(client):
+    """The GUI theme must load when no logo PNG is installed."""
+    resp = client.get("/static/mark.svg")
     assert resp.status_code == 200
-    assert resp.content_length and resp.content_length > 1000
+    assert b"<svg" in resp.data
+    # logo.png is optional. Missing it must not be a test failure.
+    png = client.get("/static/logo.png")
+    assert png.status_code in (200, 404)
 
 
 def test_targets_endpoint(client):
@@ -62,7 +68,19 @@ def test_history_empty_then_clear(client):
     assert resp.get_json()["count"] == 0
 
 
+def test_events_stream_when_idle(client):
+    """The live stage stream answers immediately when nothing is running."""
+    resp = client.get("/api/events")
+    assert resp.status_code == 200
+    assert "text/event-stream" in (resp.content_type or "")
+    body = resp.get_data(as_text=True)
+    assert "data:" in body
+    assert "idle" in body
+
+
 def test_run_rejects_empty(client):
+    resp = client.post("/api/run", json={"request": "   ", "target_model": "generic"})
+    assert resp.status_code == 400
     resp = client.post("/api/run", json={"request": "   ", "target_model": "generic"})
     assert resp.status_code == 400
 

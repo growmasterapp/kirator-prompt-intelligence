@@ -78,7 +78,7 @@ The old `recovered/` backup tree was removed after useful pieces were merged.
 
 ## 3. Strengths
 
-1. **Clear product story** — local, private, one-time purchase positioning (`README.txt`, kiratordesigns.com).
+1. **Clear product story** — local and private (`README.md`, kiratordesigns.com).
 2. **Real multi-stage pipeline** — not a thin wrapper around one chat call.
 3. **Target-model differentiation** — ChatGPT / Claude / Gemini / Grok profiles change output shape (validated in prior test battery).
 4. **PEEM quality framework** — scorable axes users can understand.

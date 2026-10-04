@@ -14,6 +14,7 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.core.models import PromptStrategy, TechniqueMetadata, OutputFormat
+from src.core.exceptions import reraise_if_cancelled
 from src.core.json_utils import extract_json, parse_json_with_retry
 from src.models.ollama_client import OllamaClient
 from src.stages.stage5_technique_selector.selector import TECHNIQUE_CATALOG
@@ -177,6 +178,7 @@ class StrategyPlanner:
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning(f"Strategy parsing failed ({e}), using fallback")
         except Exception as e:
+            reraise_if_cancelled(e)
             logger.error(f"Strategy planning failed: {e}")
 
         # Graceful fallback

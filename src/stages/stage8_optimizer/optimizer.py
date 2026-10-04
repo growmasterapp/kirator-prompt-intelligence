@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from src.models.ollama_client import OllamaClient
 from src.stages.stage7_prompt_critic.critic import PromptCritic
+from src.core.exceptions import reraise_if_cancelled
 from src.core.models import PromptQualityScore
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,7 @@ class PromptOptimizer:
                 logger.info(f"S8: Iteration {i + 1} improved by {improvement_delta} pts (now {new_score.overall_score}/100)")
 
             except Exception as e:
+                reraise_if_cancelled(e)
                 logger.error(f"Optimization iteration {i + 1} failed: {e}")
                 break
 

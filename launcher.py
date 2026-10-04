@@ -113,7 +113,6 @@ def main():
 
     settings = get_settings()
     setup_logging()
-    PORT = settings.server.port
     REQUIRED_MODELS = [
         settings.ollama.reasoning_model,
         settings.ollama.composition_model,
@@ -199,17 +198,9 @@ def main():
     # --- Step 3: Start the Flask app ---
     print("  [3/3] Starting server...", end=" ", flush=True)
 
-    # Start browser opener in background thread
-    browser_thread = threading.Thread(
-        target=open_browser_after_delay,
-        args=(PORT, settings.server.browser_delay_seconds),
-        daemon=True
-    )
-    browser_thread.start()
-
     # Import and run the Flask application
     try:
-        from src.gui.app import app
+        from src.gui.app import app, listen_address
     except ImportError as e:
         print("FAILED")
         print()
@@ -226,10 +217,22 @@ def main():
             pass
         sys.exit(1)
 
-    print(f"DONE")
+    host, PORT = listen_address()
+
+    # Start browser opener in background thread
+    browser_thread = threading.Thread(
+        target=open_browser_after_delay,
+        args=(PORT, settings.server.browser_delay_seconds),
+        daemon=True
+    )
+    browser_thread.start()
+
+    print("DONE")
     print()
     print("-" * 62)
-    print(f"  Server running at: http://{settings.server.host}:{PORT}")
+    print(f"  Server running at: http://{host}:{PORT}")
+    if PORT != settings.server.port:
+        print(f"  ({settings.server.port} was busy, so this port was used instead.)")
     print("  Your browser should open automatically.")
     print("  If it doesn't, open the URL above manually.")
     print("  Press Ctrl+C to stop the server.")
@@ -237,7 +240,7 @@ def main():
     print()
 
     # Run the Flask app (this blocks until Ctrl+C)
-    app.run(host=settings.server.host, port=PORT, threaded=True)
+    app.run(host=host, port=PORT, threaded=True)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 ================================================================
-  KIRATOR PROMPT INTELLIGENCE v1.0
+  KIRATOR PROMPT INTELLIGENCE v1.1.0
   9-Stage AI Prompt Engineering Pipeline
 ================================================================
 
@@ -19,14 +19,21 @@ This app requires Ollama (free, local AI). If you don't have it:
 
 HOW TO RUN
 ----------
-  1. Unzip this folder anywhere
-  2. Double-click KiratorPromptIntelligence.exe
-  3. A browser window will open automatically
-  4. Type your prompt and hit Run
+  Windows: double-click Start_Kirator_Prompt_InteL.bat
 
-  The app will route your prompt through 9 stages:
+  Or, from a terminal in this folder:
+    python launcher.py
+
+  Your browser should open on its own. If it does not, use the
+  address printed in the window (http://127.0.0.1:5070 unless that
+  port was busy).
+
+  The app routes your prompt through 9 stages:
   Router > Intent > Difficulty > Strategy > Techniques >
   Composer > Critic > Optimizer > Renderer
+
+  Easy requests skip Difficulty and Optimizer (fast mode) so they
+  finish sooner. Press Cancel to stop a run.
 
 TROUBLESHOOTING
 ---------------
@@ -39,16 +46,18 @@ TROUBLESHOOTING
          ollama pull llama3.1:8b
          ollama pull bge-m3
 
-  "Port 5000 already in use"
-    -> Close any other app using port 5000, or restart your computer
+  "Port already in use"
+    -> The app moves to the next free port and prints the new address.
+       You do not need to close the other program.
 
   Browser doesn't open automatically
-    -> Open your browser and go to: http://localhost:5000
+    -> Open your browser and go to the address printed by the launcher
+       (http://127.0.0.1:5070 if 5070 was free)
 
   Nothing happens when you double-click the .exe
     -> Your antivirus may be blocking it. Add an exception for this folder.
 
 ================================================================
-  One purchase. No subscriptions. No accounts. No tracking.
-  kiratordesigns.com
+  Runs on your computer. No subscriptions. No accounts. No tracking.
+  https://kiratordesigns.com
 ================================================================

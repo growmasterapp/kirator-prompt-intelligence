@@ -15,6 +15,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 
+# Keep the per-install secret and history out of the repo and out of $HOME.
+os.environ["KIRATOR_USER_DATA"] = str(ROOT / ".pytest-user-data")
+
 
 @pytest.fixture()
 def project_root() -> Path:

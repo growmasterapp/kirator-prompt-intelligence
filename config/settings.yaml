@@ -12,7 +12,9 @@ ollama:
 
 server:
   host: 127.0.0.1
-  port: 5000
+  # 5070 avoids port 5000 (macOS AirPlay and many other dev servers).
+  # If this port is busy, the launcher tries the next free port.
+  port: 5070
   browser_delay_seconds: 3.0
 
 pipeline:
@@ -20,6 +22,8 @@ pipeline:
   max_optimize_iterations: 2
   history_max: 50
   poll_dedupe_seconds: 5.0
+  # trivial/simple requests skip difficulty (S3) and the optimizer (S8)
+  fast_mode: true
 
 paths:
   data_dir: src/data

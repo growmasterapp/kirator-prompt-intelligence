@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 92" width="92" height="92" role="img" aria-label="Kirator">
+  <rect width="92" height="92" rx="20" fill="#0C1A15"/>
+  <circle cx="46" cy="58" r="16" fill="none" stroke="#A8FF9C" stroke-width="2.5"/>
+  <circle cx="28" cy="36" r="6.5" fill="none" stroke="#A8FF9C" stroke-width="2.5"/>
+  <circle cx="40" cy="24" r="6.5" fill="none" stroke="#A8FF9C" stroke-width="2.5"/>
+  <circle cx="56" cy="24" r="6.5" fill="none" stroke="#A8FF9C" stroke-width="2.5"/>
+  <circle cx="68" cy="36" r="6.5" fill="none" stroke="#A8FF9C" stroke-width="2.5"/>
+  <circle cx="46" cy="58" r="3" fill="#A8FF9C"/>
+</svg>

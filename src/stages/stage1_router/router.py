@@ -337,6 +337,8 @@ class RequestRouter:
             return {cat: {'score': sim * 100, 'method': 'embedding'} for cat, sim in sorted_cats}
             
         except Exception as e:
+            from src.core.exceptions import reraise_if_cancelled
+            reraise_if_cancelled(e)
             print(f"[Router] Embedding classification failed: {e}")
             return {}
 

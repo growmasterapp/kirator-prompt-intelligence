@@ -38,7 +38,8 @@ class OllamaSettings:
 @dataclass(frozen=True)
 class ServerSettings:
     host: str = "127.0.0.1"
-    port: int = 5000
+    # 5070 avoids port 5000 (macOS AirPlay and many other dev servers).
+    port: int = 5070
     browser_delay_seconds: float = 3.0
 
 
@@ -48,6 +49,8 @@ class PipelineSettings:
     max_optimize_iterations: int = 2
     history_max: int = 50
     poll_dedupe_seconds: float = 5.0
+    # Skip difficulty (S3) and optimizer (S8) for trivial/simple requests.
+    fast_mode: bool = True
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,17 @@ class Settings:
     user_data_dir: Path = field(
         default_factory=lambda: Path.home() / ".kirator" / "prompt_intelligence"
     )
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    """Read a yaml/env-style flag. The string "false" must stay false."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
 
 
 def _deep_get(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
@@ -144,6 +158,10 @@ def get_settings() -> Settings:
                 "poll_dedupe_seconds",
                 default=PipelineSettings.poll_dedupe_seconds,
             )
+        ),
+        fast_mode=_as_bool(
+            _deep_get(raw, "pipeline", "fast_mode", default=PipelineSettings.fast_mode),
+            PipelineSettings.fast_mode,
         ),
     )
 
